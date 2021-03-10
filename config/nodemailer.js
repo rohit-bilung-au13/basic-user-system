@@ -23,7 +23,7 @@ let transport = nodemailer.createTransport({
           html:`<h1>Email Confirmation</h1>
           <h2>hello ${name}</h2>
           <p>Please confirm your email by clicking on the following link</p>
-          <a href=http://localhost:5678/api/confirm/${ConfirmationCode}> Click here</a>
+          <a href=http://basic-user-system13.herokuapp.com/api/confirm/${ConfirmationCode}> Click here</a>
           `
       }).catch(err => console.log(err));
   };
@@ -36,7 +36,7 @@ let transport = nodemailer.createTransport({
         html:`<h1>Account reset</h1>
         <h2>hello ${name}</h2>
         <p>Please update your password by clicking on the following link</p>
-        <a href=http://localhost:5678/api/reset/${ResetCode}> Click here</a>
+        <a href=http://basic-user-system13.herokuapp.com/api/reset/${ResetCode}> Click here</a>
         `
     }).catch(err => console.log(err));
 };
