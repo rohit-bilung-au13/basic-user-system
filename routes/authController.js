@@ -6,15 +6,82 @@ const jwt = require('jsonwebtoken');
 const Users = require('../model/userSchema');
 const config = require('../config/config');
 const nodemailer = require("../config/nodemailer");
+const session = require('express-session');
+const path = require('path');
 
 router.use(bodyParser.urlencoded({ extended: true }));
 router.use(bodyParser.json());
 
+router.use(express.static(path.join(__dirname,'../public')));
+
+router.use(session({
+    resave: false,
+    saveUninitialized: true,
+    secret: 'SECRET' 
+  }));
+  
+var passport = require('passport');
+var userProfile;
+ 
+router.use(passport.initialize());
+router.use(passport.session());
+ 
+router.get('/google/success', (req, res) => {
+    Users.findOne({ email: req.user.emails[0].value }, (err, email) => {
+        if (email) return res.status(400).render('userdash');
+        Users.create({
+            name: req.user.displayName,
+            email: req.user.emails[0].value,
+            ph_number: req.body.ph_number || null,
+            address: req.body.address || null,
+            isActive: true
+            }, (err, user) => {
+                if (err) throw err;
+                res.status(200).render('userdash',{success:"Successful registered"});
+        });
+    });
+});
+
+router.get('/error', (req, res) => res.send("error logging in"));
+ 
+passport.serializeUser(function(user, cb) {
+  cb(null, user);
+});
+ 
+passport.deserializeUser(function(obj, cb) {
+  cb(null, obj);
+});
+
+var GoogleStrategy = require('passport-google-oauth').OAuth2Strategy;
+const { reset } = require('nodemon');
+const GOOGLE_CLIENT_ID = '762002577524-nrkq5e8pv526bvb4nr1ljh855htmg78h.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = 'qTAzJA88qgVhiHJHu-e_QEgR';
+
+passport.use(new GoogleStrategy({
+    clientID: GOOGLE_CLIENT_ID,
+    clientSecret: GOOGLE_CLIENT_SECRET,
+    callbackURL: "http://localhost:5678/api/google/callback"
+  },
+  function(accessToken, refreshToken, profile, done) {
+      userProfile=profile;
+      return done(null, userProfile);
+  }
+));
+
+router.get('/google', 
+  passport.authenticate('google', { scope : ['profile', 'email'] }));
+ 
+router.get('/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/error' }),
+  function(req, res) {
+    // Successful authentication, redirect success.
+    res.redirect('success');
+  });
 
 router.post('/signup', (req, res) => {
     hashpass = bcrypt.hashSync(req.body.password, 8);
     Users.findOne({ email: req.body.email }, (err, email) => {
-        if (email) return res.status(400).send("User Already Exists");
+        if (email) return res.status(400).render('signup',{error:{exist: "User Already Exist"} });
         else {
             const token = jwt.sign({email}, config.secret);
             Users.create({
@@ -27,7 +94,7 @@ router.post('/signup', (req, res) => {
                 isActive: true
             }, (err, user) => {
                 if (err) throw err;
-                res.status(200).send('Successfully Registered and check your email to confirm');
+                res.status(200).render('signup',{success:"Successful registered, check your email"});
             });
             nodemailer.sendConfirmationEmail(
                 req.body.name,
@@ -49,7 +116,7 @@ router.get('/confirm/:confirmationCode', (req, res) => {
                 res.status(500).send({ message: err });
                 return;
             }
-            else { return res.send({ msg: 'your email is confirmed' }); }
+            else { return res.render('login',{ msg: 'your email is confirmed' }); }
         });
     });
 });
@@ -65,18 +132,18 @@ router.post('/login', (req, res) => {
             const validPass = bcrypt.compareSync(req.body.password, data.password);
 
             if (!validPass) {
-                return res.send({ auth: false, token: 'invalid password' });
+                return res.render('login',{error:{ptoken: 'invalid password' }});
             }
             else if (data.status != "Active") {
-                return res.status(401).send({
+                return res.status(401).render('login',{
                     message: "Pending Account. Please Verify Your Email!",
                 });
             }
             else {
-                if (data.role !="admin"){
+                if (data.role != "admin"){
                     return res.render('userdash');
                 }else{
-                    return res.render('admindash');
+                    return res.redirect('adminpage');
                 }
             }
 
@@ -88,7 +155,7 @@ router.post('/login', (req, res) => {
 
 router.post('/forgot', (req,res)=>{
     Users.findOne({ email: req.body.email }, (err, data) => {
-        if (!data) return res.status(400).send("No Email Exists");
+        if (!data) return res.status(400).render('forgot',{exist:"No email found"});
         else{
             var rtoken = jwt.sign({id:data._id},config.secret,{expiresIn:3600});
             var name = data.name;
@@ -98,7 +165,7 @@ router.post('/forgot', (req,res)=>{
                 res.status(500).send({ message: err });
                 return;
             }else{
-                res.send("check ypur email");
+                res.render('forgot',{sent:"check your email for reset link"});
             }
         });
             nodemailer.sendResetEmail(
@@ -110,44 +177,86 @@ router.post('/forgot', (req,res)=>{
     });
 });
 
-router.get('/reset/:resetCode', (req, res) => {
-    Users.findOne({ resetCode: req.params.resetCode }, (err, data) => {
-        if (err) return res.status(500).send('error while verifying');
-
-        if (!data) return res.send({ auth: false, code: "error in verifying" });
+router.get('/reset/:resetCode', (req,res)=>{
+    Users.findOne({resetCode:req.params.resetCode}, (err,data)=>{
+        if (err) throw err;
         else{
-            return res.render('reset');
+            res.render('reset',{
+                list:data
+            });
+        }
+    }).lean();
+});
+
+router.post('/reset',(req,res)=>{
+    Users.findOne({_id:req.body._id},(err,user) => {
+        if(!err){
+            newPass = req.body.npass;
+            conPass = req.body.cpass;
+            if (newPass != conPass){
+                return res.send("password missmatch");
+            }else{
+                var hashpass = bcrypt.hashSync(conPass, 8);
+                user.password = hashpass;
+                user.save((err) => {
+                    if (err) {
+                        res.status(500).send({ message: err });
+                        return;
+                    }
+                    else { 
+                        return res.render('login',{ msg: 'your password is updated' }); }
+                });
+            }
         }
     });
 });
 
-router.put('/update/:', (req,res)=>{
-    Users.findOne({password:req.params.password}, (err,data)=>{
-        newPass= req.body.npass;
-        confPass= req.body.cpass;
+router.get('/adminpage', (req, res) => {
+    Users.find({}, (err, user) => {
+        if (err) throw err;
+        res.render('admindash',{
+            list:user
+        });
+    }).lean();
+});
 
-        if (err) return res.status(500).send('error while updating');
-            
-        if (!data) return res.send({ auth: false, code: "error in updating" });
-        else{
-            if(newPass!=confPass) return res.send('pasword miss match');
-            data.password=confPass;
-            data.save((err) => {
-                if (err) {
-                    res.status(500).send({ message: err });
-                    return;
-                }
-                else { return res.send({ msg: 'your password updated' }); }
+router.get('/update/:id',(req,res) => {
+    Users.findById(req.params.id,(err,user) => {
+        if(!err){
+            res.render("addOrEdit",{
+                list: user
             });
         }
     });
 });
 
-router.get('/all', (req, res) => {
-    Users.find({}, (err, user) => {
-        if (err) throw err;
-        res.status(200).send(user);
+router.post('/update',(req,res)=>{
+    Users.findOneAndUpdate({_id:req.body._id},(err,data)=>{
+        if(!data)return res.send("error in updating");
+        data.name = req.body.name;
+        data.ph_number = req.body.ph_number;
+        data.address = req.body.address;
+        data.save((err) => {
+            if (err) {
+                res.status(500).send({ message: err });
+                return;
+            }
+            else { return res.send({ msg: 'your password updated' }); }
+        });
     });
 });
+
+router.get('/delete/:id',(req,res) => {
+    Users.findByIdAndRemove(req.params.id,(err,doc) => {
+        if(!err){
+            res.redirect('/api/adminpage');
+        }
+        else{
+            console.log("An error occured during the Delete Process" + err);
+        }
+    });
+});
+
+
 
 module.exports = router;

@@ -6,6 +6,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const db = require('../config/db');
 const exphbs = require('express-handlebars');
+const session = require('express-session');
 
 app.use(cors());
 
