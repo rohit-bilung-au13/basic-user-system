@@ -236,6 +236,29 @@ router.post('/update',(req,res)=>{
     });
 });
 
+router.post('/add', (req, res) => {
+    hashpass = bcrypt.hashSync(req.body.password, 8);
+    Users.findOne({ email: req.body.email }, (err, email) => {
+        if (email) return res.status(400).render('add',{error:{exist: "User Already Exist"} });
+        else {
+            const token = jwt.sign({email}, config.secret);
+            Users.create({
+                name: req.body.name,
+                email: req.body.email,
+                password: hashpass,
+                confirmationCode: token,
+                ph_number: req.body.ph_number || null,
+                address: req.body.address || null,
+                status : "Active",
+                isActive: true
+            }, (err, user) => {
+                if (err) throw err;
+                res.status(200).redirect('./adminpage');
+            });
+        }
+    });
+});
+
 router.get('/delete/:id',(req,res) => {
     Users.findByIdAndRemove(req.params.id,(err,doc) => {
         if(!err){
