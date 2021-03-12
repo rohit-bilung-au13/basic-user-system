@@ -36,7 +36,7 @@ let transport = nodemailer.createTransport({
         html:`<h1>Account reset</h1>
         <h2>hello ${name}</h2>
         <p>Please update your password by clicking on the following link</p>
-        <a href=https://basic-user-system13.herokuapp.com/api/reset/${ResetCode}> Click here</a>
+        <a href=https://basic-user-system13.herokuapp.com/reset/${ResetCode}> Click here</a>
         `
     }).catch(err => console.log(err));
 };
