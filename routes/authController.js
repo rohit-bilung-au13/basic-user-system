@@ -28,7 +28,7 @@ router.use(passport.session());
  
 router.get('/google/success', (req, res) => {
     Users.findOne({ email: req.user.emails[0].value }, (err, email) => {
-        if (email) return res.status(400).render('userdash');
+        if (email) return res.status(200).render('userdash');
         Users.create({
             name: req.user.displayName,
             email: req.user.emails[0].value,
@@ -37,7 +37,7 @@ router.get('/google/success', (req, res) => {
             isActive: true
             }, (err, user) => {
                 if (err) throw err;
-                res.status(200).render('userdash',{success:"Successful registered"});
+                res.status(200).render('userdash');
         });
     });
 });
@@ -60,7 +60,7 @@ const GOOGLE_CLIENT_SECRET = 'qTAzJA88qgVhiHJHu-e_QEgR';
 passport.use(new GoogleStrategy({
     clientID: GOOGLE_CLIENT_ID,
     clientSecret: GOOGLE_CLIENT_SECRET,
-    callbackURL: "http://localhost:5678/api/google/callback"
+    callbackURL: "https://basic-user-system13.herokuapp.com/api/google/callback"
   },
   function(accessToken, refreshToken, profile, done) {
       userProfile=profile;
